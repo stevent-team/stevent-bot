@@ -13,8 +13,8 @@ use serenity::{
 };
 
 // Schedules
-const LIGHT_THEME_SCHEDULE: &str = "0 07  * * *";
-const DARK_THEME_SCHEDULE: &str  = "0 17 * * *";
+const LIGHT_THEME_SCHEDULE: &str = "0 0 07 * * * *";
+const DARK_THEME_SCHEDULE: &str  = "0 0 17 * * * *";
 
 // Icons
 const LIGHT_ICON: &str = "./Stevent_Logo_Light.png";
