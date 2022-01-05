@@ -1,7 +1,9 @@
 extern crate dotenv;
 
 use std::env;
+use std::time::Duration;
 use dotenv::dotenv;
+use tokio_cron_scheduler::{JobScheduler, Job};
 
 use serenity::{
     utils,
@@ -9,6 +11,14 @@ use serenity::{
     model::{channel::Message, gateway::Ready, guild::PartialGuild},
     prelude::*,
 };
+
+// Schedules
+const LIGHT_THEME_SCHEDULE: &str = "0 07  * * *";
+const DARK_THEME_SCHEDULE: &str  = "0 17 * * *";
+
+// Icons
+const LIGHT_ICON: &str = "./Stevent_Logo_Light.png";
+const DARK_ICON: &str = "./Stevent_Logo_Dark.png";
 
 struct Handler;
 
@@ -23,27 +33,65 @@ impl EventHandler for Handler {
     }
 
     async fn ready(&self, ctx: Context, ready: Ready) {
-        println!("{} is connected!", ready.user.name);
+        println!("\"{}\" is connected!", ready.user.name);
 
-        // Update each of the users guilds
-        if let Ok(guilds) = ready.user.guilds(&ctx.http).await {
-            for guild_info in guilds {
-                if let Ok(mut guild) = ctx.http.get_guild(guild_info.id.0).await {
-                    println!("Updating server \"{}\"", guild_info.name);
-                    update_guild_icon(&ctx, &mut guild).await;
-                }
+        // Schedule icon updates
+        schedule_icon_updates(ctx, ready).await;
+    }
+}
+
+async fn schedule_icon_updates(ctx: Context, ready: Ready) {
+    // Create a scheduler
+    let mut sched = JobScheduler::new();    
+
+    // Create a light-theme job
+    let light_ctx = ctx.clone();
+    let light_ready = ready.clone();
+    let light_job = Job::new_async(LIGHT_THEME_SCHEDULE, move |_uuid, _l| {
+        let light_ctx = light_ctx.clone();
+        let light_ready = light_ready.clone();
+        Box::pin(async move {
+            println!("Applying light theme!");
+            update_guild_icons(&light_ctx, &light_ready, LIGHT_ICON).await;
+        })
+    }).unwrap();
+
+    // Create a dark theme job
+    let dark_ctx = ctx.clone();
+    let dark_ready = ready.clone();
+    let dark_job = Job::new_async(DARK_THEME_SCHEDULE, move |_uuid, _l| {
+        let dark_ctx = dark_ctx.clone();
+        let dark_ready = dark_ready.clone();
+        Box::pin(async move {
+            println!("Applying dark theme!");
+            update_guild_icons(&dark_ctx, &dark_ready, DARK_ICON).await;
+        })
+    }).unwrap();
+
+    // Schedule the jobs
+    sched.add(dark_job).unwrap();
+    sched.add(light_job).unwrap();
+
+    loop {
+        sched.tick().unwrap();
+        std::thread::sleep(Duration::from_millis(500));
+    }
+}
+
+async fn update_guild_icons(ctx: &Context, ready: &Ready, icon_path: &str) {
+    // Update the icon of each guild the bot is in
+    if let Ok(guilds) = ready.user.guilds(&ctx.http).await {
+        for guild_info in guilds {
+            if let Ok(mut guild) = ctx.http.get_guild(guild_info.id.0).await {
+                update_guild_icon(&ctx, &mut guild, icon_path).await;
             }
         }
     }
 }
 
-async fn update_guild_icon(ctx: &Context, guild: &mut PartialGuild) {
-    // Read command line args for image to set
-    let args: Vec<String> = env::args().collect();
-    let guild_icon_path = &args[1];
-
+async fn update_guild_icon(ctx: &Context, guild: &mut PartialGuild, icon_path: &str) {
     // Read icon
-    let base64_icon = utils::read_image(guild_icon_path)
+    let base64_icon = utils::read_image(icon_path)
         .expect("Failed to read specified guild icon.");
 
     // Update icon
@@ -56,11 +104,6 @@ async fn update_guild_icon(ctx: &Context, guild: &mut PartialGuild) {
 async fn main() {
     // Load env from .env
     dotenv().ok();
-    
-    // Check number of args
-    if env::args().len() != 2 {
-        panic!("1 argument is required");
-    }
 
     // Get the token from the env
     let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
