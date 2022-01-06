@@ -13,8 +13,8 @@ use serenity::{
 };
 
 // Schedules
-const LIGHT_THEME_SCHEDULE: &str = "0 0 07 * * * *";
-const DARK_THEME_SCHEDULE: &str  = "0 0 17 * * * *";
+const LIGHT_THEME_SCHEDULE: &str = "0 0 20 * * * *"; // UTC 8pm = AEDT 7am
+const DARK_THEME_SCHEDULE: &str  = "0 0 06 * * * *"; // UTC 6am = AEDT 5pm
 
 // Icons
 const LIGHT_ICON: &str = "./Stevent_Logo_Light.png";
@@ -90,6 +90,12 @@ async fn update_guild_icons(ctx: &Context, ready: &Ready, icon_path: &str) {
 }
 
 async fn update_guild_icon(ctx: &Context, guild: &mut PartialGuild, icon_path: &str) {
+    // HACK: remove
+    if guild.name == "Stevent" {
+        println!("Skipping stevent");
+        return
+    }
+
     // Read icon
     let base64_icon = utils::read_image(icon_path)
         .expect("Failed to read specified guild icon.");
