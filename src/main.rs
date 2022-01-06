@@ -90,12 +90,6 @@ async fn update_guild_icons(ctx: &Context, ready: &Ready, icon_path: &str) {
 }
 
 async fn update_guild_icon(ctx: &Context, guild: &mut PartialGuild, icon_path: &str) {
-    // HACK: remove
-    if guild.name == "Stevent" {
-        println!("Skipping stevent");
-        return
-    }
-
     // Read icon
     let base64_icon = utils::read_image(icon_path)
         .expect("Failed to read specified guild icon.");
