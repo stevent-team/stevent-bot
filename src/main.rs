@@ -1,20 +1,15 @@
 extern crate dotenv;
 
 use std::env;
-use std::time::Duration;
 use dotenv::dotenv;
-use tokio_cron_scheduler::{JobScheduler, Job};
-
+use std::net::{TcpListener, TcpStream};
+use std::io::{Read};
 use serenity::{
     utils,
     async_trait,
     model::{channel::Message, gateway::Ready, guild::PartialGuild},
     prelude::*,
 };
-
-// Schedules
-const LIGHT_THEME_SCHEDULE: &str = "0 0 20 * * * *"; // UTC 8pm = AEDT 7am
-const DARK_THEME_SCHEDULE: &str  = "0 0 06 * * * *"; // UTC 6am = AEDT 5pm
 
 // Icons
 const LIGHT_ICON: &str = "./Stevent_Logo_Light.png";
@@ -36,45 +31,38 @@ impl EventHandler for Handler {
         println!("\"{}\" is connected!", ready.user.name);
 
         // Schedule icon updates
-        schedule_icon_updates(ctx, ready).await;
+        start_server(&ctx, &ready).await;
     }
 }
 
-async fn schedule_icon_updates(ctx: Context, ready: Ready) {
-    // Create a scheduler
-    let mut sched = JobScheduler::new();    
+async fn start_server(ctx: &Context, ready: &Ready) {
+    let listener = TcpListener::bind("0.0.0.0:3333").unwrap();
+    println!("Server listening on 3333");
 
-    // Create a light-theme job
-    let light_ctx = ctx.clone();
-    let light_ready = ready.clone();
-    let light_job = Job::new_async(LIGHT_THEME_SCHEDULE, move |_uuid, _l| {
-        let light_ctx = light_ctx.clone();
-        let light_ready = light_ready.clone();
-        Box::pin(async move {
-            println!("Applying light theme!");
-            update_guild_icons(&light_ctx, &light_ready, LIGHT_ICON).await;
-        })
-    }).unwrap();
+    for stream in listener.incoming() {
+        match stream {
+            Ok(stream) => {
+                println!("New connection from {}", stream.peer_addr().unwrap());
+                handle_client(stream, &ctx, &ready).await;
+            }
+            Err(err) => {
+                println!("Connection failed: {}", err)
+            }
+        }
+    }
 
-    // Create a dark theme job
-    let dark_ctx = ctx.clone();
-    let dark_ready = ready.clone();
-    let dark_job = Job::new_async(DARK_THEME_SCHEDULE, move |_uuid, _l| {
-        let dark_ctx = dark_ctx.clone();
-        let dark_ready = dark_ready.clone();
-        Box::pin(async move {
-            println!("Applying dark theme!");
-            update_guild_icons(&dark_ctx, &dark_ready, DARK_ICON).await;
-        })
-    }).unwrap();
+    // Close the socket
+    drop(listener);
+}
 
-    // Schedule the jobs
-    sched.add(dark_job).unwrap();
-    sched.add(light_job).unwrap();
-
-    loop {
-        sched.tick().unwrap();
-        std::thread::sleep(Duration::from_millis(500));
+async fn handle_client(mut stream: TcpStream, ctx: &Context, ready: &Ready) {
+    let mut data = [0 as u8; 50];
+    if let Ok(size) = stream.read(&mut data) {
+        match &data[0..size] {
+            b"light" => { update_guild_icons(&ctx, &ready, LIGHT_ICON).await; }
+            b"dark" => { update_guild_icons(&ctx, &ready, DARK_ICON).await; }
+            _ => { println!("Unknown option") }
+        };
     }
 }
 
